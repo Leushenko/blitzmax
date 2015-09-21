@@ -528,11 +528,6 @@ CGReg *CGFrame_C::genScc( CGScc *t ){
 }
 
 CGReg *CGFrame_C::genJsr( CGJsr *t ){
-
-	if( env_platform=="macos" ){
-		return genMacJsr( t );
-	}
-
 	int k,arg_sz=0;
 
 	CGExp *ea=t->exp;
@@ -606,107 +601,6 @@ static int maxParamSize( CGExp *e,int sz ){
 	MaxParamSizeVisitor v;
 	e->visit(v);
 	return v.size>sz ? v.size : sz;
-}
-
-CGReg *CGFrame_C::genMacJsr( CGJsr *t ){
-
-///*
-	int i;
-	vector<int> maxszs;
-	vector<CGExp*> args;
-	vector<CGMov*> movs;
-	
-	CGExp *ea=t->exp,*self=0;
-	if( CGVfn *p=ea->vfn() ){
-		ea=p->exp;
-		self=p->self;
-	}
-	
-	args.push_back( ea );
-	if( self ) args.push_back( self );
-	for( i=0;i<t->args.size();++i ){
-		args.push_back( t->args[i] );
-	}
-	
-	int maxsz=0;
-	for( i=0;i<args.size();++i ){
-		maxszs.push_back( maxsz );
-		maxsz=maxParamSize( args[i],maxsz );
-	}
-	
-	char buf[256];
-	int offset=paramSize( t );
-	if( offset>param_sz ) param_sz=offset;
-	
-	for( i=args.size()-1;i>=0;--i ){
-		if( i ){
-			CGExp *arg=args[i];
-			offset-=argSize( arg );
-			CGExp *lhs=mem( arg->type,esp,offset );
-			CGExp *rhs=genExp( args[i],buf,EA_IMM );
-			movs.push_back( mov(lhs,rhs) );
-		}else{
-			ea=genExp( ea,buf,EA_MEM|EA_IMM );
-		}
-		bool again=true;
-		vector<CGMov*>::iterator it;
-		while( again ){
-			again=false;
-			for( it=movs.begin();it!=movs.end();++it ){
-				CGMov *t=*it;
-				if(	t->lhs->mem()->offset>=maxszs[i] ){
-					genMov( t->lhs,t->rhs );
-					movs.erase( it );
-					again=true;
-					break;
-				}
-			}
-		}
-	}
-//*/	
-/*
-	vector<CGExp*> args;
-	
-	int k,arg_sz=0;
-
-	for( k=t->args.size()-1;k>=0;--k ){
-		CGExp *arg=t->args[k];
-		args.push_back( genExp(t->args[k]) );
-	}
-
-	CGExp *ea=t->exp;
-
-	if( CGVfn *t=ea->vfn() ){
-		args.push_back( genExp(t->self) );
-		ea=t->exp;
-	}
-
-	char buf[256];
-	ea=genExp( ea,buf,EA_MEM|EA_IMM );
-	
-	for( k=args.size()-1;k>=0;--k ){
-		CGExp *arg=args[k],*p;
-		p=mem( arg->type,esp,arg_sz );
-		arg_sz+=(arg->type==CG_FLOAT64) ? 8 : 4;
-		genMov( p,arg );
-		args[k]=p;
-	}
-
-	if( arg_sz>param_sz ) param_sz=arg_sz;
-*/
-
-	CGReg *dst=t->isfloat() ? fp0 : eax;
-
-	CGAsm *as=gen( mov(dst,jsr(t->type,t->call_conv,ea)),"\tcall\t%s\n",buf );
-
-	as->def.insert(EAX);as->def.insert(EDX);as->def.insert(ECX);
-	as->def.insert(FP0);as->def.insert(FP1);as->def.insert(FP2);
-	as->def.insert(FP3);as->def.insert(FP4);as->def.insert(FP5);
-	as->def.insert(FP6);
-
-	CGReg *r=reg( t->type );
-	genMov( r,dst );
-	return r;
 }
 
 CGReg *CGFrame_C::genLit( CGLit *t ){
@@ -828,8 +722,7 @@ void CGFrame_C::genRet( CGExp *e ){
 }
 
 string CGFrame_C::fixSym( string id ){
-	if( env_platform=="linux" ) return id;
-	return "_"+id;
+	return id;
 }
 
 void CGFrame_C::genStm( CGStm *s ){
@@ -923,9 +816,9 @@ CGFrame_C::CGFrame_C( CGFun *f,CGModule_C *m ):CGFrame(f),mod_c(m){
 
 	arg_sz=0;
 	tmp_mem=0;
-	param_sz=0;
 	local_sz=0;
 	extern_jsrs=0;
+	word_sz = 4;//TODO
 
 	//int types map to reg bank 0
 	reg_banks[CG_PTR]=0;

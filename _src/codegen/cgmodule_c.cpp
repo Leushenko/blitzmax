@@ -2,9 +2,6 @@
 #include "cgstd.h"
 
 #include "cgmodule_c.h"
-//#include "cgfixfp_x86.h"
-
-static bool USE_NASM=false;	//NASM doesn't seem to work at all
 
 CGModule_C::CGModule_C( ostream &o ):CGModule(o){
 }
@@ -12,11 +9,7 @@ CGModule_C::CGModule_C( ostream &o ):CGModule(o){
 void CGModule_C::setSeg( string t ){
 	if( seg==t ) return;
 	seg=t;
-	if( USE_NASM ){
-		out<<"\tsection\t."<<seg<<'\n';
-	}else{
-		out<<"\tsection\t"<<seg<<'\n';
-	}
+	out<<"\tsection\t"<<seg<<'\n';
 }
 
 CGFrame *CGModule_C::frame( CGFun *fun ){
@@ -24,49 +17,25 @@ CGFrame *CGModule_C::frame( CGFun *fun ){
 }
 
 void CGModule_C::emitHeader(){
-	/*if( env_platform=="win32" ){
-		out<<"\tformat\tMS COFF\n";
-	}else if( env_platform=="linux" ){
-		out<<"\tformat\tELF\n";
-	}else if( env_platform!="macos" ){
-		assert(0);
-	}*/
-  out << "/* C assembly test\n   header */\n";
+	out << "#include <stdint.h>\n";
+	out << "//#define ASSERT(C) ...\n";
+  out << "#ifdef BMAX_64_BIT\n";
+	out << "  //typedef union {} VAL;\n";
+	out << "#else\n";
+	out << "  typedef union { int32_t i; float f; void * p; void *(*f)(void); } VAL;\n";
+	out << "  //ASSERT(sizeof(VAL) == ...)\n";
+	out << "#endif\n";
 }
 
 void CGModule_C::emitImport( string t ){
-	/*if( USE_NASM ){
-		out<<"\textern\t"<<t<<'\n';
-	}else{
-		out<<"\textrn\t"<<t<<'\n';
-	}*/
-  out << "extern void * " << t << ";\n";
+out << "extern VAL " << t << ";\n";//TODO this is wrong for bigger types
 }
 
 void CGModule_C::emitExport( string t ){
-	/*if( USE_NASM ){
-		out<<"\tglobal\t"<<t<<'\n';
-	}else{
-		out<<"\tpublic\t"<<t<<'\n';
-	}*/
-  out << "void * " << t << ";\n";
+	out << "VAL " << t << ";\n";
 }
 
 void CGModule_C::emitFrame( CGFrame *f ){
-
-	/*if( env_platform=="win32" ){
-		setSeg( "\"code\" code" );
-	}else if( env_platform=="linux" ){
-		setSeg( "\"code\" executable" );
-	}else if( env_platform=="macos" ){
-		setSeg( "text" );
-	}
-
-	if( env_platform=="macos" ){
-		emitMacFrame( f );
-		return;
-	}*/
-
 	CGFrame_C *frame=dynamic_cast<CGFrame_C*>(f);
 	assert( frame );
 
@@ -84,41 +53,31 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	int local_sz=frame->local_sz;
 
 	//create frame
-	out<<frame->fun->sym->value<<":\n";
+	out << "VAL " << frame->fun->sym->value<<"(";
+	for (int i = frame->argCount() - 1; i >= 0; i --) {
+		out << "VAL p" << i;
+		if (i > 0) { out << ", "; }
+	}
+	out << "){\n";
 	
-	out<<"\tpush\tebp\n";
-	out<<"\tmov\tebp,esp\n";
-	emitSubEsp( local_sz );
-	//push callee save
-	if( n_use[3] ) out<<"\tpush\tebx\n";
-	if( n_use[4] ) out<<"\tpush\tesi\n";
-	if( n_use[5] ) out<<"\tpush\tedi\n";
-
+	out << "  VAL eax, edx, ecx, ebx, esi, edi;\n";
+	if (local_sz > 0) {
+		out << "VAL";
+		for (int i = 0; i < local_sz; i ++) {
+			out << " var" << i;
+			if (i < local_sz - 1) { out << ","; }
+		}
+		out << ";\n";
+	}
+	
 	CGAsm *as;
 
 	for( as=frame->assem.begin;as!=frame->assem.end;as=as->succ ){
-		if( as->stm && as->stm->ret() ){
-			//pop callee save
-			if( n_use[5] ) out<<"\tpop\tedi\n";
-			if( n_use[4] ) out<<"\tpop\tesi\n";
-			if( n_use[3] ) out<<"\tpop\tebx\n";
-			out<<"\tmov\tesp,ebp\n";
-			out<<"\tpop\tebp\n";
-		}
-
 		const char *p=as->assem;
 		if( !p ) continue;
-
 		out<<p;
 	}
-}
-
-void CGModule_C::emitSubEsp( int sz ){
-	while( sz>4096 ){
-		out<<"\tsub\tesp,4092\n\tpush\teax\n";
-		sz-=4096;
-	}
-	if( sz ) out<<"\tsub\tesp,"<<sz<<'\n';
+	out << "}\n";
 }
 
 void CGModule_C::emitData( CGDat *d ){

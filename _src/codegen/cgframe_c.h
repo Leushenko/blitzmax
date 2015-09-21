@@ -10,7 +10,8 @@ struct CGFrame_C : public CGFrame{
 
 	CGModule_C *mod_c;
 
-	int arg_sz,param_sz,local_sz,tmp_mem,extern_jsrs;
+	int arg_sz,local_sz,tmp_mem,extern_jsrs;
+	int word_sz;
 
 	enum{
 		EA_IMM=1,EA_MEM=2
@@ -42,7 +43,6 @@ struct CGFrame_C : public CGFrame{
 	CGReg*	genBop( CGBop *exp );
 	CGReg*	genScc( CGScc *exp );
 	CGReg*	genJsr( CGJsr *exp );
-	CGReg*	genMacJsr( CGJsr *exp );
 	CGReg*	genLit( CGLit *exp );
 	CGReg*	genSym( CGSym *exp );
 	CGReg*  genFrm( CGFrm *exp );
@@ -71,6 +71,8 @@ struct CGFrame_C : public CGFrame{
 
 	static const char *x86cc( int cg_cc );
 	static const char *x86size( int cg_sz );
+	
+	int argCount() const { return arg_sz / word_sz; }
 };
 
 #endif
