@@ -24,34 +24,37 @@ CGFrame *CGModule_C::frame( CGFun *fun ){
 }
 
 void CGModule_C::emitHeader(){
-	if( env_platform=="win32" ){
+	/*if( env_platform=="win32" ){
 		out<<"\tformat\tMS COFF\n";
 	}else if( env_platform=="linux" ){
 		out<<"\tformat\tELF\n";
 	}else if( env_platform!="macos" ){
 		assert(0);
-	}
+	}*/
+  out << "/* C assembly test\n   header */\n";
 }
 
 void CGModule_C::emitImport( string t ){
-	if( USE_NASM ){
+	/*if( USE_NASM ){
 		out<<"\textern\t"<<t<<'\n';
 	}else{
 		out<<"\textrn\t"<<t<<'\n';
-	}
+	}*/
+  out << "extern void * " << t << ";\n";
 }
 
 void CGModule_C::emitExport( string t ){
-	if( USE_NASM ){
+	/*if( USE_NASM ){
 		out<<"\tglobal\t"<<t<<'\n';
 	}else{
 		out<<"\tpublic\t"<<t<<'\n';
-	}
+	}*/
+  out << "void * " << t << ";\n";
 }
 
 void CGModule_C::emitFrame( CGFrame *f ){
 
-	if( env_platform=="win32" ){
+	/*if( env_platform=="win32" ){
 		setSeg( "\"code\" code" );
 	}else if( env_platform=="linux" ){
 		setSeg( "\"code\" executable" );
@@ -62,7 +65,7 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	if( env_platform=="macos" ){
 		emitMacFrame( f );
 		return;
-	}
+	}*/
 
 	CGFrame_C *frame=dynamic_cast<CGFrame_C*>(f);
 	assert( frame );
@@ -116,71 +119,6 @@ void CGModule_C::emitSubEsp( int sz ){
 		sz-=4096;
 	}
 	if( sz ) out<<"\tsub\tesp,"<<sz<<'\n';
-}
-
-void CGModule_C::emitMacFrame( CGFrame *f ){
-
-	CGFrame_C *frame=dynamic_cast<CGFrame_C*>(f);
-	assert( frame );
-
-	int k,n_use[7]={0};
-
-	for( k=0;k<frame->regs.size();++k ){
-		CGReg *r=frame->regs[k];
-		if( r->isint() && r->id>=14 && r->color>=0 && r->color<7 ) ++n_use[r->color];
-	}
-
-	int save_sz=8;				//ret address+ebp
-	if( n_use[3] ) save_sz+=4;	//ebx
-	if( n_use[4] ) save_sz+=4;	//esi
-	if( n_use[5] ) save_sz+=4;	//edi
-
-	int local_sz=frame->local_sz;
-	int param_sz=frame->param_sz;
-
-	int frame_sz=param_sz+local_sz+save_sz;
-
-	frame_sz=(frame_sz+15)&~15;
-
-	param_sz=frame_sz-(local_sz+save_sz);
-
-	//create frame
-	out<<frame->fun->sym->value<<":\n";
-
-	//push ebp
-	out<<"\tpush\tebp\n";
-	out<<"\tmov\tebp,esp\n";
-
-	if( save_sz>8 ){
-		emitSubEsp( local_sz );
-		if( n_use[3] ) out<<"\tpush\tebx\n";
-		if(	n_use[4] ) out<<"\tpush\tesi\n";
-		if( n_use[5] ) out<<"\tpush\tedi\n";
-		emitSubEsp( param_sz );
-	}else{
-		emitSubEsp( local_sz+param_sz );
-	}
-
-	CGAsm *as;
-
-	for( as=frame->assem.begin;as!=frame->assem.end;as=as->succ ){
-		if( as->stm && as->stm->ret() ){
-			//pop callee save
-			if( save_sz>8 ){
-				if( param_sz ) out<<"\tadd\tesp,"<<param_sz<<'\n';
-				if( n_use[5] ) out<<"\tpop\tedi\n";
-				if( n_use[4] ) out<<"\tpop\tesi\n";
-				if( n_use[3] ) out<<"\tpop\tebx\n";
-			}
-			out<<"\tmov\tesp,ebp\n";
-			out<<"\tpop\tebp\n";
-		}
-
-		const char *p=as->assem;
-		if( !p ) continue;
-
-		out<<p;
-	}
 }
 
 void CGModule_C::emitData( CGDat *d ){

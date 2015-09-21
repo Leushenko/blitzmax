@@ -17,7 +17,6 @@ struct CGModule_C : public CGModule{
 	void		emitImport( string t );
 	void		emitExport( string t );
 	void		emitFrame( CGFrame *f );
-	void		emitMacFrame( CGFrame *f );
 	void		emitData( CGDat *d );
 	void		emitFooter();
 	void		emitSubEsp( int sz );

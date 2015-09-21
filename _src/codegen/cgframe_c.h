@@ -8,7 +8,7 @@ struct CGModule_C;
 
 struct CGFrame_C : public CGFrame{
 
-	CGModule_C *mod_x86;
+	CGModule_C *mod_c;
 
 	int arg_sz,param_sz,local_sz,tmp_mem,extern_jsrs;
 
@@ -59,8 +59,6 @@ struct CGFrame_C : public CGFrame{
 
 	void	genBcc( int cc,CGExp *lhs,CGExp *rhs,CGSym *sym );
 	void	genRet( CGExp *exp );
-
-	void	fixFp() {}
 
 	CGFrame_C( CGFun *fun,CGModule_C *mod );
 

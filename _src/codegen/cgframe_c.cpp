@@ -917,10 +917,9 @@ CGExp *CGFrame_C::allocSpill( CGReg *r ){
 }
 
 void CGFrame_C::finish(){
-	fixFp();
 }
 
-CGFrame_C::CGFrame_C( CGFun *f,CGModule_C *m ):CGFrame(f),mod_x86(m){
+CGFrame_C::CGFrame_C( CGFun *f,CGModule_C *m ):CGFrame(f),mod_c(m){
 
 	arg_sz=0;
 	tmp_mem=0;

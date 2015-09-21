@@ -377,7 +377,7 @@ void FunBlock::genAssem(){
 	for( k=0;k<_funBlocks.size();++k ) cgfuns.push_back( _funBlocks[k]->cg_fun );
 	string file=getdir(opt_infile)+"/.bmx/"+stripdir(opt_infile);
 	if( opt_apptype.size() ) file+="."+opt_apptype;
-	file+=config_mung+".s";
+	file+=config_mung+(opt_arch == "c" ? ".c" : ".s");
 	ofstream out(file.c_str());
 	cgGenCode( out,cgfuns );
 	out.close();

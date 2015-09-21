@@ -187,7 +187,8 @@ End Function
 Function CompileBMX( src$,obj$,opts$ )
 	DeleteFile obj
 
-	Local azm$=StripExt(obj)+".s"
+	Local azm$' = StripExt(obj) + ".s"
+	If opt_arch = "c" Then azm = StripExt(obj) + ".c" Else StripExt(obj) + ".s"
 ?MacOs
 	Local cmd$=CQuote(BlitzMaxPath()+"/bin/bcc")+opts+" -o "+CQuote(azm)+" "+CQuote(src)
 ?Win32
