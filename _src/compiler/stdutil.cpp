@@ -162,7 +162,7 @@ void stdutil_init( int argc,char *argv[] ){
 	
 	if( opt_arch=="ppc" ){
 		env_config.insert( "bigendian" );
-	}else if( opt_arch=="x86" ){
+	}else if( opt_arch=="x86" || opt_arch=="c" ){
 		env_config.insert( "littleendian" );
 	}else{
 		fail( "Command line error" );

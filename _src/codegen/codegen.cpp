@@ -7,6 +7,7 @@
 
 #include "cgmodule_x86.h"
 #include "cgmodule_ppc.h"
+#include "cgmodule_c.h"
 
 void cgGenCode( ostream &o,const vector<CGFun*> &funs ){
 
@@ -14,6 +15,7 @@ void cgGenCode( ostream &o,const vector<CGFun*> &funs ){
 
 	if( opt_arch=="x86" ) mod=new CGModule_X86(o);
 	else if( opt_arch=="ppc" ) mod=new CGModule_PPC(o);
+	else if( opt_arch=="c" ) mod=new CGModule_C(o);
 	else fail( "No backend available" );
 
 	for( int k=0;k<funs.size();++k ){

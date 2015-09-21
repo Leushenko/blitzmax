@@ -106,18 +106,23 @@ Function ParseSourceFile:TSourceFile( path$ )
 ?ppc
 				Case "ppc" cc=opt_arch="ppc"
 ?
+				Case "c"
+					cc = (opt_arch = "c")
 ?Win32
 				Case "win32" cc=True
 				Case "win32x86" cc=opt_arch="x86"
 				Case "win32ppc" cc=opt_arch="ppc"
+				Case "win32c" cc=opt_arch="c"
 ?Linux
 				Case "linux" cc=True
 				Case "linuxx86" cc=opt_arch="x86"
 				Case "linuxppc" cc=opt_arch="ppc"
+				Case "linuxc" cc=opt_arch="c"
 ?MacOS
 				Case "macos" cc=True
 				Case "macosx86" cc=opt_arch="x86"
 				Case "macosppc" cc=opt_arch="ppc"
+				Case "macosc" cc=opt_arch="c"
 ?
 				Default
 					cc=False
