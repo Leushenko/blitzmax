@@ -69,9 +69,6 @@ struct CGFrame_C : public CGFrame{
 	virtual CGExp *allocSpill( CGReg *r );
 	virtual void finish();
 
-	static const char *x86cc( int cg_cc );
-	static const char *x86size( int cg_sz );
-	
 	int argCount() const { return arg_sz / word_sz; }
 };
 

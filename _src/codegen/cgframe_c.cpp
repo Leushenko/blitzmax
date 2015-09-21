@@ -11,7 +11,7 @@ using namespace CG;
 //Can't use %lld 'coz it doesn't work on mingw!
 //#define FMTI64 "%lld"
 
-const char *CGFrame_C::x86cc( int cc ){
+static const char * x86cc( int cc ){
 	switch( cc ){
 	case CG_EQ:return "e";
 	case CG_NE:return "ne";
@@ -28,7 +28,24 @@ const char *CGFrame_C::x86cc( int cc ){
 	return 0;
 }
 
-const char *CGFrame_C::x86size( int type ){
+static const char * cmpOp(int cc) {
+	switch( cc ){
+	case CG_EQ:return "==";
+	case CG_NE:return "!=";
+	case CG_LT:return "<";
+	case CG_GT:return ">";
+	case CG_LE:return "<=";
+	case CG_GE:return ">=";
+	case CG_LTU:return "<";
+	case CG_GTU:return ">";
+	case CG_LEU:return "<=";
+	case CG_GEU:return ">=";
+	}
+	assert(0);
+	return 0;
+}
+
+static const char * x86size( int type ){
 	switch(type){
 	case CG_PTR:return "dword";
 	case CG_INT8:return "byte";
@@ -38,7 +55,7 @@ const char *CGFrame_C::x86size( int type ){
 	case CG_FLOAT32:return "dword";
 	case CG_FLOAT64:return "qword";
 	}
-	cout<<"Unrcognized type:"<<type<<endl;
+	cout<<"Unrecognized type:"<<type<<endl;
 	assert(0);
 	return 0;
 }
@@ -701,9 +718,8 @@ void CGFrame_C::genBcc( int cc,CGExp *lhs,CGExp *rhs,CGSym *tgt ){
 	rhs=genExp(rhs,rhs_buf,lhs->mem() ? EA_IMM : EA_MEM|EA_IMM);
 	gen(
 		bcc(cc,lhs,rhs,tgt),
-		"\tcmp\t%s,%s\n"
-		"\tj%s\t%s\n",
-		lhs_buf,rhs_buf,x86cc(cc),tgt->value.c_str() );
+		"  if (%s %s %s) goto %s;\n",
+		lhs_buf,cmpOp(cc),rhs_buf,tgt->value.c_str() );
 }
 
 void CGFrame_C::genRet( CGExp *e ){
@@ -713,11 +729,11 @@ void CGFrame_C::genRet( CGExp *e ){
 		genMov(r,e);
 	}
 	CGAsm *as;
-	if( fun->call_conv==CG_CDECL ){
-		as=gen( ret(r),"\tret\n" );
-	}else{
-		as=gen( ret(r),"\tret\t%i\n",arg_sz );
-	}
+	
+	as = gen(ret(r), "  return %s;\n",
+	(fun->type == CG_FLOAT64 || fun->type == CG_FLOAT32 || fun->type == CG_INT64)
+	? "retv" //TODO
+	: "eax.i");
 	as->use.insert( EBP );
 }
 
