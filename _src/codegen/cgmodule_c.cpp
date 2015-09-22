@@ -4,22 +4,45 @@
 
 #include "cgmodule_c.h"
 
-static const char * typeName(int i) {
+static const std::string typeName(int i) {
 	switch(i) {
 		case CG_VOID: return "void";
 		case CG_PTR: return "void *";
-		case CG_INT8: return "int8_t";
-		case CG_INT16: return "int16_t";
+		case CG_INT8: return "uint8_t";
+		case CG_INT16: return "uint16_t";
 		case CG_INT32: return "int32_t";
 		case CG_INT64: return "int64_t";
 		case CG_FLOAT32: return "float";
 		case CG_FLOAT64: return "double";
 		case CG_CSTRING: return "char *";
-		case CG_BSTRING: return "void *";
+		case CG_BSTRING: return "uint16_t *";
 		default:
 			assert(0);
 	}
 	return 0;//nullptr;
+}
+static const std::string anyGet(int i) {  // access member for the given type
+	switch(i) {
+		case CG_PTR: return "p";
+		case CG_INT8: return "c";
+		case CG_INT16: return "s";
+		case CG_INT32: return "i";
+		case CG_INT64: return "l";  // for use with extended version
+		case CG_FLOAT32: return "f";
+		case CG_FLOAT64: return "d";
+		case CG_CSTRING: return "ca";
+		case CG_BSTRING: return "sa";
+		default:
+			assert(0);
+	}
+	return 0;//nullptr;
+}
+static const std::string varType(CGDat * d) {
+	if (d->exps.size() > 1) {
+		return "ANY";
+	} else {
+		return typeName(d->exps[0]->type);
+	}
 }
 
 CGModule_C::CGModule_C( ostream &o ):CGModule(o){
@@ -36,14 +59,19 @@ CGFrame *CGModule_C::frame( CGFun *fun ){
 }
 
 void CGModule_C::emitHeader(){
-	out << "#include <stdint.h>\n";
-	out << "//#define ASSERT(C) ...\n";
-  out << "#ifdef BMAX_64_BIT\n";
-	out << "  //typedef union {} ANY;\n";
-	out << "#else\n";
-	out << "  typedef union { int32_t i; float f; void * p; void *(*f)(void); } ANY;\n";
-	out << "  //ASSERT(sizeof(ANY) == ...)\n";
-	out << "#endif\n";
+	out << "#include <stdint.h>\n"
+				 "//#define ASSERT(C) ...\n"
+  			 "#ifdef BMAX_64_BIT\n"
+				 "  //typedef union { ... } ANY;\n"
+				 "  #error 64-bit not supported; try the NG compiler\n"
+				 "#else\n"
+				 "  typedef union { \n"
+	       "    int32_t i; float f; void * p; void *(*k)(void);\n"
+				 "    uint8_t c; uint16_t s; uint8_t ca[4]; uint16_t sa[2];\n"
+				 "  } ANY;\n"
+				 "  //ASSERT(sizeof(ANY) == ...)\n"
+				 "  //ASSERT(sizeof(int32_t) == sizeof(intptr_t))\n"
+				 "#endif\n";
 }
 
 void CGModule_C::emitImport( string t ){
@@ -74,7 +102,11 @@ static void varDecl(CGDat * d, std::ostream & out) {
 	if (name[0] == '_' && isdigit(name[1])) {
 		out << "static ";
 	}
-	out << "ANY " << name << "[]"; // using an array is the easiest way to vary the storage size here
+	if (d->exps.size() > 1) {
+		out << "ANY " << name << "[]";
+	} else {
+		out << typeName(d->exps[0]->type) << " " << name;
+	}
 }
 
 void CGModule_C::emitVarDeclaration(CGDat * d) {
@@ -124,104 +156,91 @@ void CGModule_C::emitFrame( CGFrame *f ){
 		if( !p ) continue;
 		out<<p;
 	}
-	out << "}\n";
+	out << "  return ((" << typeName(frame->fun->type) << ")0);\n}\n";
 }
 
 void CGModule_C::emitData( CGDat *d ){
-
-	if( env_platform=="win32" ){
-		setSeg( "\"data\" data writeable align 8" );
-	}else if( env_platform=="linux" ){
-		setSeg( "\"data\" writeable align 8" );
-	}else if( env_platform=="macos" ){
-		setSeg( "data" );
-	}
+	varDecl(d, out);
+	out << " = ";
 	
-	int align=4;
-	if( d->exps.size()==1 ){
-		switch( d->exps[0]->type ){
-		case CG_INT8:
-		case CG_CSTRING:
-			align=1;
-			break;
-		case CG_INT16:
-			align=2;
-			break;
-		case CG_INT64:case CG_FLOAT64:
-			align=8;
-			break;
-		}
-	}
-	if( align!=1 ){
-		out<<"\talign\t"<<align<<"\n";
-	}
+	int elems = d->exps.size();
+	if (elems > 1) { out << "{\n"; }
 	
-	out<<d->value<<":\n";
-
-	for( int k=0;k<d->exps.size();++k ){
-
+	for( int k=0;k < elems;++k ){
 		CGExp *e=d->exps[k];
 
 		if( CGLit *t=e->lit() ){
+			if (elems > 1) {
+				out << "  (ANY){ ." << anyGet(t->type) << " = ";
+			}
+			
 			if( t->type==CG_INT8 ){
 				out<<"\tdb\t"<<unsigned(t->int_value)<<'\n';
 			}else if( t->type==CG_INT16 ){
 				out<<"\tdw\t"<<unsigned(t->int_value)<<'\n';
 			}else if( t->type==CG_INT32 ){
-				out<<"\tdd\t"<<int(t->int_value)<<'\n';
+				out << t->int_value;
 			}else if( t->type==CG_INT64 ){
-				out<<"\tdd\t"<<int(t->int_value)<<','<<int(t->int_value>>int64(32))<<'\n';
+				out << t->int_value;
 			}else if( t->type==CG_FLOAT32 ){
-				float f=t->float_value;
-				int n=*(int*)&f;
-				out<<"\tdd\t0x"<<hex<<n<<dec<<'\n';
-//				float f=t->float_value;
-//				out<<"\tdd\t0x"<<hex<<*((int*)&f)<<dec<<'\n';
+				out << t->float_value;
 			}else if( t->type==CG_FLOAT64 ){
-				double f=t->float_value;
-				int64 n=*(int64*)&f;
-				out<<"\tdd\t0x"<<hex<<int(n)<<",0x"<<int(n>>int64(32))<<dec<<'\n';
-//				double f=t->float_value;
-//#if __APPLE__ && __BIG_ENDIAN__
-//				out<<"\tdd\t0x"<<hex<<*((int*)&f+1)<<",0x"<<*((int*)&f)<<dec<<'\n';
-//#else
-//				out<<"\tdd\t0x"<<hex<<*((int*)&f)<<",0x"<<*((int*)&f+1)<<dec<<'\n';
-//#endif
+				out << t->float_value;
 			}else if( t->type==CG_CSTRING ){
 				bstring s=t->string_value;
-				out<<"\tdb\t\"";
-				for( int k=0;k<s.size();++k ){
-					if( s[k]==34 ){
-						if( env_platform=="macos" ){
+				if (elems == 1) {
+					out << "(char[]){\"";
+					for( int k=0;k<s.size();++k ){
+						if( s[k]==34 ){
 							out<<"\\\"";
 						}else{
-							out<<"\",34,\"";
+						 	out<<(char)s[k];
 						}
-					}else{
-					 	out<<(char)s[k];
+					}
+					out << "\"}";
+				} else {
+					for (int k = 0; k < s.size(); k += 4) {  //TODO 64-bit aware please
+						if (k) { out << " },\n  (ANY){ .ca = "; }
+						out << "{" << s[k] << "," << s[k + 1] << ","
+						    << s[k + 2] << "," << s[k + 3] << "}";
 					}
 				}
-				out<<"\",0\n";
 			}else if( t->type==CG_BSTRING ){
 				bstring s=t->string_value;
-				out<<"\tdd\t"<<s.size();
-				for( int k=0;k<s.size();++k ){
-					if( k%16 ) out<<','<<(unsigned)s[k];
-					else out<<"\n\tdw\t"<<(unsigned)s[k];
+				if (elems == 1) {
+					out << "(uint16_t[]){";
+					for( int k=0;k<s.size();++k ){
+						out << s[k] << ",";
+					}
+					out << "}";
+				} else {
+					for (int k = 0; k < s.size(); k += 2) {  //TODO 64-bit aware please
+						if (k) { out << " },\n  (ANY){ .sa = "; }
+						out << "{" << s[k] << "," << s[k + 1] << "}";
+					}
 				}
-				out<<"\n";
 			}else if( t->type==CG_BINFILE ){
-				string file=tostring(t->string_value);
-				out<<"\tfile\t\""+file+"\"\n";
+				//string file=tostring(t->string_value);
+				//out<<"\tfile\t\""+file+"\"\n";
+				out << "\n#error IncBin not yet supported\n";
 			}else if( t->type==CG_LABEL ){
-				out<<tostring(t->string_value)<<":\n";
+				//out<<tostring(t->string_value)<<":\n";
+				out << "\n#error CG_LABEL not yet supported\n";  //TODO what is this anyway?
 			}else{
 				assert(0);
 			}
+			
+			if (elems > 1) { out << " },\n"; }
 		}else if( CGSym *t=e->sym() ){
-			out<<"\tdd\t"<<t->value<<'\n';
+			if (elems > 1) {
+				out << "  (ANY){ .p = " << t->value << " },\n";  // (ugh) it's either a fptr or an ANY[]
+			} else {
+				out << t->value << ".i";
+			}
 		}else if( CGLea *t=e->lea() ){
-			CGMem *m=t->exp->mem();
+			//TODO what does this do?
+			out << "\n#error CGLea not yet supported\n";
+			/*CGMem *m=t->exp->mem();
 			assert(m);
 			if( CGReg *t=m->exp->reg() ){
 				out<<"\tdd\t"<<m->offset<<'\n';
@@ -234,11 +253,12 @@ void CGModule_C::emitData( CGDat *d ){
 				}
 			}else{
 				assert(0);
-			}
+			}*/
 		}else{
 			fail( "cgmodule_c::emitData - unrecognized data format" );
 		}
 	}
+	out << (elems > 1 ? "};\n" : ";\n");
 }
 
 void CGModule_C::emitFooter(){
