@@ -1,7 +1,26 @@
 
 #include "cgstd.h"
+#include "cgcode.h"
 
 #include "cgmodule_c.h"
+
+static const char * typeName(int i) {
+	switch(i) {
+		case CG_VOID: return "void";
+		case CG_PTR: return "void *";
+		case CG_INT8: return "int8_t";
+		case CG_INT16: return "int16_t";
+		case CG_INT32: return "int32_t";
+		case CG_INT64: return "int64_t";
+		case CG_FLOAT32: return "float";
+		case CG_FLOAT64: return "double";
+		case CG_CSTRING: return "char *";
+		case CG_BSTRING: return "void *";
+		default:
+			assert(0);
+	}
+	return 0;//nullptr;
+}
 
 CGModule_C::CGModule_C( ostream &o ):CGModule(o){
 }
@@ -20,19 +39,51 @@ void CGModule_C::emitHeader(){
 	out << "#include <stdint.h>\n";
 	out << "//#define ASSERT(C) ...\n";
   out << "#ifdef BMAX_64_BIT\n";
-	out << "  //typedef union {} VAL;\n";
+	out << "  //typedef union {} ANY;\n";
 	out << "#else\n";
-	out << "  typedef union { int32_t i; float f; void * p; void *(*f)(void); } VAL;\n";
-	out << "  //ASSERT(sizeof(VAL) == ...)\n";
+	out << "  typedef union { int32_t i; float f; void * p; void *(*f)(void); } ANY;\n";
+	out << "  //ASSERT(sizeof(ANY) == ...)\n";
 	out << "#endif\n";
 }
 
 void CGModule_C::emitImport( string t ){
-out << "extern VAL " << t << ";\n";//TODO this is wrong for bigger types
+out << "extern ANY " << t << ";\n"; // we can reinterpret as necessary at point of use
 }
 
-void CGModule_C::emitExport( string t ){
-	out << "VAL " << t << ";\n";
+void CGModule_C::emitExport( string t ) {}
+
+static void funDecl(CGFun* fun, std::ostream & out) {
+	const string name = fun->sym->value;
+	if (name[0] == '_' && isdigit(name[1])) {
+		out << "static ";
+	}
+	out << typeName(fun->type) << " " << name <<"(";
+	if (fun->self) {
+		out << "ANY * self" << (fun->args.size() ? ", " : "");
+	} else if (fun->args.size() == 0) {
+		out << "void";
+	}
+	for (std::vector<CGExp*>::size_type i = 0, sz = fun->args.size(); i < sz; i ++) {
+		out << typeName(fun->args[i]->type) << " p" << i;
+		if (i < sz - 1) { out << ", "; }
+	}
+	out << ")";
+}
+static void varDecl(CGDat * d, std::ostream & out) {
+	const string name = d->value;
+	if (name[0] == '_' && isdigit(name[1])) {
+		out << "static ";
+	}
+	out << "ANY " << name << "[]"; // using an array is the easiest way to vary the storage size here
+}
+
+void CGModule_C::emitVarDeclaration(CGDat * d) {
+	varDecl(d, out);
+	out << ";\n";
+}
+void CGModule_C::emitFunDeclaration(CGFun * f) {
+	funDecl(f, out);
+	out << ";\n";
 }
 
 void CGModule_C::emitFrame( CGFrame *f ){
@@ -53,18 +104,14 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	int local_sz=frame->local_sz;
 
 	//create frame
-	out << "VAL " << frame->fun->sym->value<<"(";
-	for (int i = frame->argCount() - 1; i >= 0; i --) {
-		out << "VAL p" << i;
-		if (i > 0) { out << ", "; }
-	}
-	out << "){\n";
+	funDecl(frame->fun, out);
+	out << " {\n";
 	
-	out << "  VAL eax, edx, ecx, ebx, esi, edi;\n";
+	out << "  ANY eax, edx, ecx, ebx, esi, edi;\n";
 	if (local_sz > 0) {
-		out << "VAL";
+		out << "  ANY";
 		for (int i = 0; i < local_sz; i ++) {
-			out << " var" << i;
+			out << " v" << i;
 			if (i < local_sz - 1) { out << ","; }
 		}
 		out << ";\n";

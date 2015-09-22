@@ -17,6 +17,8 @@ struct CGModule_PPC : public CGModule{
 	void		emitHeader();
 	void		emitImport( string t );
 	void		emitExport( string t );
+	void emitVarDeclaration(CGDat * d) {}
+	void emitFunDeclaration(CGFun * f) {}
 	void		emitFrame( CGFrame *f );
 	void		emitData( CGDat *d );
 	void		emitFooter();

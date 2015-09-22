@@ -17,6 +17,8 @@ struct CGModule_X86 : public CGModule{
 	void		emitImport( string t );
 	void		emitExport( string t );
 	void		emitFrame( CGFrame *f );
+	void emitVarDeclaration(CGDat * d) {}
+	void emitFunDeclaration(CGFun * f) {}
 	void		emitMacFrame( CGFrame *f );
 	void		emitData( CGDat *d );
 	void		emitFooter();

@@ -21,6 +21,8 @@ struct CGModule{
 	virtual void	emitHeader()=0;
 	virtual void	emitImport( string t )=0;
 	virtual void	emitExport( string t )=0;
+	virtual void emitVarDeclaration(CGDat * d) = 0;
+	virtual void emitFunDeclaration(CGFun * f) = 0;
 	virtual void	emitFrame( CGFrame *frame )=0;
 	virtual void	emitData( CGDat *dat )=0;
 	virtual void	emitFooter()=0;

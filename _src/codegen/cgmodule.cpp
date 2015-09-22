@@ -69,6 +69,14 @@ void CGModule::emitModule(){
 		emitExport( *sym_it );
 	}
 	
+	//any necessary predeclarations for the output format
+	for( k=0;k<datas.size();++k ){
+		emitVarDeclaration(datas[k]);
+	}
+	for( k=0;k<frames.size();++k ){
+		emitFunDeclaration(frames[k]->fun);
+	}
+	
 	//frames
 	for( k=0;k<frames.size();++k ){
 		emitFrame( frames[k] );
