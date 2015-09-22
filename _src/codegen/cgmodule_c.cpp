@@ -139,9 +139,10 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	}
 
 	int local_sz=frame->local_sz;
+	CGFun * fun = frame->fun;
 
 	//create frame
-	funDecl(frame->fun);
+	funDecl(fun);
 	out << " {\n";
 	
 	out << "  ANY eax, edx, ecx, ebx, esi, edi;\n";
@@ -153,15 +154,21 @@ void CGModule_C::emitFrame( CGFrame *f ){
 		}
 		out << ";\n";
 	}
+	if (fun->type == CG_FLOAT64 || fun->type == CG_FLOAT32 || fun->type == CG_INT64) {
+		out << typeName(fun->type) << " retv;\n";
+	}
 	
-	CGAsm *as;
-
+	CGAsm *as, *pv;
 	for( as=frame->assem.begin;as!=frame->assem.end;as=as->succ ){
 		const char *p=as->assem;
 		if( !p ) continue;
-	//	out<<p;
+		out<<p;
+		pv = as;
 	}
-	out << "  return ((" << typeName(frame->fun->type) << ")0);\n}\n";
+	if (!(pv->stm && pv->stm->ret())) {
+		out << "  return ((" << typeName(frame->fun->type) << ")0);\n";
+	}
+	out << "}\n";
 }
 
 void CGModule_C::emitData( CGDat *d ){

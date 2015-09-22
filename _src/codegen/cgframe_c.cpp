@@ -300,10 +300,10 @@ void CGFrame_C::genMov( CGExp *lhs,CGExp *rhs ){
 			}else if( lhs_reg && t->isfloat() ){
 				const char *op=0;
 				switch( t->op ){
-				case CG_ADD:op="fadd";break;
-				case CG_SUB:op="fsub";break;
-				case CG_MUL:op="fmul";break;
-				case CG_DIV:op="fdiv";break;
+				case CG_ADD:op="+";break;
+				case CG_SUB:op="-";break;
+				case CG_MUL:op="*";break;
+				case CG_DIV:op="/";break;
 				}
 				if( op ){
 					int rhs_ea=0;
@@ -311,7 +311,7 @@ void CGFrame_C::genMov( CGExp *lhs,CGExp *rhs ){
 					if( lhs_reg ) rhs_ea|=EA_MEM;
 					rhs=genExp( t->rhs,rhs_buf,rhs_ea );
 					gen( mov(lhs,bop(t->op,lhs,rhs)),
-						"\t%s\t%s,%s\n",op,lhs_buf,rhs_buf );
+						"  %s %s= %s;\n",lhs_buf,op,rhs_buf );
 					return;
 				}
 			}
@@ -334,7 +334,7 @@ void CGFrame_C::genMov( CGExp *lhs,CGExp *rhs ){
 	}
 
 	gen( mov(lhs,rhs),
-		"\tmov\t%s,%s\n",lhs_buf,rhs_buf );
+		"  %s = %s;\n",lhs_buf,rhs_buf );
 }
 
 CGReg *CGFrame_C::genLea( CGLea *t ){
@@ -404,52 +404,20 @@ static int shifter( int n ){
 }
 
 CGReg *CGFrame_C::genBop( CGBop *t ){
-
-	if( t->isint() && (t->op==CG_MUL || t->op==CG_DIV) ){
-		if( CGLit *c=t->rhs->lit() ){
-			int i=c->int_value;
-			if( t->op==CG_MUL ){
-				int n=shifter(i);
-				if( n!=-1 ){
-					return genBop( bop(CG_SHL,t->lhs,lit(n)) );
-				}
-			}else if( t->op==CG_DIV ){
-				int n=shifter(i);
-				if( n!=-1 ){
-					genMov( eax,t->lhs );
-					gen( xop(XOP_CDQ,edx,eax),"\tcdq\n" );
-					CGExp *e=edx;
-					e=bop(CG_AND,edx,lit(i-1));
-					e=bop(CG_ADD,eax,e);
-					e=bop(CG_SAR,e,lit(n));
-					return genExp(e);
-				}
-			}
-		}
-	}
-
 	CGReg *r=reg(t->type);
 
 	const char *op=0;
 
-	if( t->isfloat() ){
-		switch( t->op ){
-		case CG_ADD:op="fadd";break;
-		case CG_SUB:op="fsub";break;
-		case CG_MUL:op="fmul";break;
-		case CG_DIV:op="fdiv";break;
-		}
-	}else{
-		switch( t->op ){
-		case CG_ADD:op="add";break;
-		case CG_SUB:op="sub";break;
-		case CG_MUL:op="imul";break;
-		case CG_AND:op="and";break;
-		case CG_ORL:op="or";break;
-		case CG_XOR:op="xor";break;
-		}
+	switch( t->op ){
+		case CG_ADD:op="+";break;
+		case CG_SUB:op="-";break;
+		case CG_MUL:op="*";break;
+		case CG_DIV:op="/";break;
+		case CG_AND:op="&";break;
+		case CG_ORL:op="|";break;
+		case CG_XOR:op="^";break;
 	}
-
+	
 	if( op ){
 		genMov( r,t->lhs );
 
@@ -457,14 +425,14 @@ CGReg *CGFrame_C::genBop( CGBop *t ){
 		CGExp *rhs=genExp( t->rhs,buf,EA_MEM|EA_IMM );
 
 		gen( mov(r,bop(t->op,r,rhs)),
-			"\t%s\t'%i,%s\n",op,r->id,buf );
+			"  '%i %s= %s;\n", r->id, op, buf );
 		return r;
 	}
 
 	assert( t->isint() );
 
 	switch( t->op ){
-	case CG_SHL:op="shl";break;
+	case CG_SHL:op="<<";break;
 	case CG_SHR:op="shr";break;
 	case CG_SAR:op="sar";break;
 	}
@@ -746,17 +714,17 @@ void CGFrame_C::genStm( CGStm *s ){
 	if( CGAti *t=s->ati() ){
 		char buf[256];
 		CGMem *mem=genMem( t->mem,buf );
-		gen( ati(mem),"\tinc\t%s\n",buf );
+		gen( ati(mem),"  ++%s;\n",buf );
 	}else if( CGAtd *t=s->atd() ){
 		char buf[256];
 		CGMem *mem=genMem( t->mem,buf );
-		gen( atd(mem,t->sym),"\tdec\t%s\n\tjnz\t%s\n",buf,t->sym->value.c_str() );
+		gen( atd(mem,t->sym),"  if(--%s) goto %s;\n",buf,t->sym->value.c_str() );
 	}else if( CGMov *t=s->mov() ){
 		genMov( t->lhs,t->rhs );
 	}else if( CGLab *t=s->lab() ){
 		gen( t,"%s:\n",t->sym->value.c_str() );
 	}else if( CGBra *t=s->bra() ){
-		gen( t,"\tjmp\t%s\n",t->sym->value.c_str() );
+		gen( t,"  goto %s;\n",t->sym->value.c_str() );
 	}else if( CGBcc *t=s->bcc() ){
 		genBcc( t->cc,t->lhs,t->rhs,t->sym );
 	}else if( CGEva *t=s->eva() ){
