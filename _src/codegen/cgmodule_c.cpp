@@ -45,7 +45,7 @@ static const std::string varType(CGDat * d) {
 	}
 }
 
-CGModule_C::CGModule_C( ostream &o ):CGModule(o){
+CGModule_C::CGModule_C( ostream &o ):CGModule(o), file_main(""){
 }
 
 void CGModule_C::setSeg( string t ){
@@ -60,6 +60,7 @@ CGFrame *CGModule_C::frame( CGFun *fun ){
 
 void CGModule_C::emitHeader(){
 	out << "#include <stdint.h>\n"
+	       "#include <stdlib.h>\n"
 				 "//#define ASSERT(C) ...\n"
   			 "#ifdef BMAX_64_BIT\n"
 				 "  //typedef union { ... } ANY;\n"
@@ -80,10 +81,14 @@ out << "extern ANY " << t << ";\n"; // we can reinterpret as necessary at point 
 
 void CGModule_C::emitExport( string t ) {}
 
-static void funDecl(CGFun* fun, std::ostream & out) {
-	const string name = fun->sym->value;
+void CGModule_C::funDecl(CGFun* fun) {
+	std::string name = fun->sym->value;
 	if (name[0] == '_' && isdigit(name[1])) {
 		out << "static ";
+	}
+	if (name == "_bb_main" || name.substr(0, 2) == "__") { // detect startup and hook in extra stuff
+		file_main = name;
+		name = name + "2";
 	}
 	out << typeName(fun->type) << " " << name <<"(";
 	if (fun->self) {
@@ -97,7 +102,7 @@ static void funDecl(CGFun* fun, std::ostream & out) {
 	}
 	out << ")";
 }
-static void varDecl(CGDat * d, std::ostream & out) {
+void CGModule_C::varDecl(CGDat * d) {
 	const string name = d->value;
 	if (name[0] == '_' && isdigit(name[1])) {
 		out << "static ";
@@ -110,11 +115,11 @@ static void varDecl(CGDat * d, std::ostream & out) {
 }
 
 void CGModule_C::emitVarDeclaration(CGDat * d) {
-	varDecl(d, out);
+	varDecl(d);
 	out << ";\n";
 }
 void CGModule_C::emitFunDeclaration(CGFun * f) {
-	funDecl(f, out);
+	funDecl(f);
 	out << ";\n";
 }
 
@@ -136,7 +141,7 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	int local_sz=frame->local_sz;
 
 	//create frame
-	funDecl(frame->fun, out);
+	funDecl(frame->fun);
 	out << " {\n";
 	
 	out << "  ANY eax, edx, ecx, ebx, esi, edi;\n";
@@ -154,16 +159,16 @@ void CGModule_C::emitFrame( CGFrame *f ){
 	for( as=frame->assem.begin;as!=frame->assem.end;as=as->succ ){
 		const char *p=as->assem;
 		if( !p ) continue;
-		out<<p;
+	//	out<<p;
 	}
 	out << "  return ((" << typeName(frame->fun->type) << ")0);\n}\n";
 }
 
 void CGModule_C::emitData( CGDat *d ){
-	varDecl(d, out);
-	out << " = ";
-	
 	int elems = d->exps.size();
+	
+	varDecl(d);
+	out << " = ";
 	if (elems > 1) { out << "{\n"; }
 	
 	for( int k=0;k < elems;++k ){
@@ -233,9 +238,9 @@ void CGModule_C::emitData( CGDat *d ){
 			if (elems > 1) { out << " },\n"; }
 		}else if( CGSym *t=e->sym() ){
 			if (elems > 1) {
-				out << "  (ANY){ .p = " << t->value << " },\n";  // (ugh) it's either a fptr or an ANY[]
+				out << "  (ANY){ .p = NULL },\n";  // (ugh)
 			} else {
-				out << t->value << ".i";
+				out << "0";
 			}
 		}else if( CGLea *t=e->lea() ){
 			//TODO what does this do?
@@ -261,5 +266,28 @@ void CGModule_C::emitData( CGDat *d ){
 	out << (elems > 1 ? "};\n" : ";\n");
 }
 
+void CGModule_C::emitData2(CGDat * d) {
+	int elems = d->exps.size();
+	if (elems > 1) {
+		for (int el = 0; el < elems; el ++) {
+			if (CGSym * t = d->exps[el]->sym()) {
+				out << "  " << d->value << "[" << el << "]";
+				out << (std::find(importSyms.begin(), importSyms.end(), t->value) != importSyms.end() ? " = " : ".p = (void *)");
+				out << t->value << ";\n"; // (ugh) should be either a fptr or an ANY
+			}
+		}
+	} else if (CGSym * t = d->exps[0]->sym()) {
+		out << "  " << d->value << " = " << t->value << ".i;\n"; // assumes they'll always be external symbols, thus ANY
+	}
+}
+
 void CGModule_C::emitFooter(){
+	out << "int32_t " << file_main << "(void) {\n";
+	
+	for(int k = 0; k < datas.size(); k ++) {
+		emitData2(datas[k]);
+	}
+	
+	out << "  return " << file_main << "2();\n"
+				 "}\n";
 }

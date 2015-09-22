@@ -7,6 +7,7 @@
 
 struct CGModule_C : public CGModule{
 	string		seg;
+	string file_main;
 	
 	CGModule_C( ostream &out );
 	
@@ -21,6 +22,10 @@ struct CGModule_C : public CGModule{
 	void		emitFrame( CGFrame *f );
 	void		emitData( CGDat *d );
 	void		emitFooter();
+	
+	void funDecl(CGFun* fun);
+	void varDecl(CGDat * d);
+	void emitData2(CGDat * d);
 };
 
 #endif
