@@ -161,12 +161,17 @@ Function CompileC( src$,obj$,opts$ )
 '	EndIf
 
 ?Win32
+
+	opts:+" -m32 -ffast-math"
+	
 	If Not mod_opts Or Not mod_opts.hasCCopt("-march")
 		opts:+" -march=pentium"
 	EndIf
-	opts:+" -ffast-math"
+	
 ?Linux
+
 	opts:+" -m32 -mfancy-math-387 -fno-strict-aliasing"
+	
 ?
 	If mod_opts
 		If Not mod_opts.hasCCopt("-fexceptions")
@@ -223,7 +228,9 @@ Function CreateArc( path$ , oobjs:TList )
 			EndIf
 			cmd=""
 		EndIf
+		
 		If Not cmd cmd="ar -r "+CQuote(path)
+
 		cmd:+" "+CQuote(t)
 	Next
 ?MacOS
@@ -285,54 +292,102 @@ Function LinkApp( path$,lnk_files:TList,makelib )
 			files:+t+Chr(10)
 		EndIf
 	Next
+	
 	cmd:+" -lSystem -framework CoreServices -framework CoreFoundation"
+	
 ?Win32
-	cmd=CQuote(BlitzMaxPath()+"/bin/ld.exe")+" -s -stack 4194304"	'symbol stripping enabled
-	If opt_apptype="gui" cmd:+" -subsystem windows"
-	If makelib cmd:+" -shared"
+
+	cmd=CQuote(BlitzMaxPath()+"/bin/ld.exe")
 	
-	cmd:+" -o "+CQuote( path )
-	cmd:+" "+CQuote( "-L"+CQuote( BlitzMaxPath()+"/lib" ) )
+	If FileType( cmd )<>FILETYPE_FILE
 
-	If makelib
-		Local imp$=StripExt(path)+".a"
-		Local def$=StripExt(path)+".def"
-		If FileType( def )<>FILETYPE_FILE Throw "Cannot locate .def file"
-		cmd:+" "+def
-		cmd:+" --out-implib "+imp
-		files:+"~n"+CQuote( BlitzMaxPath()+"/lib/dllcrt2.o" )
-	Else
-		files:+"~n"+CQuote( BlitzMaxPath()+"/lib/crtbegin.o" )
-		files:+"~n"+CQuote( BlitzMaxPath()+"/lib/crt2.o" )
-	EndIf
+		'New style link using g++
 
-	'Unholy!!!!!
-	Local xpmanifest$
-	For Local f$=EachIn lnk_files
-		Local t$=CQuote( f )
-		If opt_dumpbuild Or (t[..1]="-" And t[..2]<>"-l")
-			cmd:+" "+t
-		Else
-			If f.EndsWith( "/win32maxguiex.mod/xpmanifest.o" )
-				xpmanifest=t
+		cmd="g++ -m32 -static -s "
+		
+		If opt_apptype="gui" cmd:+" -mwindows"
+		
+		cmd:+" -o "+CQuote( path )
+		cmd:+" "+CQuote( "-L"+CQuote( BlitzMaxPath()+"/lib" ) )
+		
+		Local xpmanifest$
+		For Local f$=EachIn lnk_files
+			Local t$=CQuote( f )
+			If opt_dumpbuild Or (t[..1]="-" And t[..2]<>"-l")
+				cmd:+" "+t
 			Else
-				files:+"~n"+t
+				If f.EndsWith( "/win32maxguiex.mod/xpmanifest.o" )
+					xpmanifest=t
+				Else
+					files:+" "+t
+				EndIf
 			EndIf
+		Next
+	
+		If xpmanifest files:+" "+xpmanifest
+		
+		files:+"~n-lgdi32 -lwsock32 -lwinmm -ladvapi32"
+		files:+" -lstdc++ -lpthread -lgcc -lmingwex -lmingw32 -lmoldname -lmsvcrt -luser32 -lkernel32"
+		
+		cmd:+" @"+CQuote( tmpfile )
+		
+	Else
+	
+		'Old style link using bin/ld.exe
+	
+		cmd:+" --oformat pei-i386"
+		
+		cmd:+" -s -stack 4194304"	'symbol stripping enabled
+		
+		If opt_apptype="gui" cmd:+" -subsystem windows"
+		
+		If makelib cmd:+" -shared"
+	
+		cmd:+" -o "+CQuote( path )
+		cmd:+" "+CQuote( "-L"+CQuote( BlitzMaxPath()+"/lib" ) )
+	
+		If makelib
+			Local imp$=StripExt(path)+".a"
+			Local def$=StripExt(path)+".def"
+			If FileType( def )<>FILETYPE_FILE Throw "Cannot locate .def file"
+			cmd:+" "+def
+			cmd:+" --out-implib "+imp
+			files:+"~n"+CQuote( BlitzMaxPath()+"/lib/dllcrt2.o" )
+		Else
+			files:+"~n"+CQuote( BlitzMaxPath()+"/lib/crtbegin.o" )
+			files:+"~n"+CQuote( BlitzMaxPath()+"/lib/crt2.o" )
 		EndIf
-	Next
-
-	If xpmanifest files:+"~n"+xpmanifest
 	
-	cmd:+" "+CQuote( tmpfile )
-
-	files:+"~n-lgdi32 -lwsock32 -lwinmm -ladvapi32"
-	files:+" -lstdc++ -lgcc -lmingwex -lmingw32 -lmoldname -lmsvcrt -luser32 -lkernel32"
+		'Unholy!!!!!
+		Local xpmanifest$
+		For Local f$=EachIn lnk_files
+			Local t$=CQuote( f )
+			If opt_dumpbuild Or (t[..1]="-" And t[..2]<>"-l")
+				cmd:+" "+t
+			Else
+				If f.EndsWith( "/win32maxguiex.mod/xpmanifest.o" )
+					xpmanifest=t
+				Else
+					files:+"~n"+t
+				EndIf
+			EndIf
+		Next
 	
-	If Not makelib
-		files:+" "+CQuote( BlitzMaxPath()+"/lib/crtend.o" )
-	EndIf
+		If xpmanifest files:+"~n"+xpmanifest
+		
+		cmd:+" "+CQuote( tmpfile )
 	
-	files="INPUT("+files+")"
+		files:+"~n-lgdi32 -lwsock32 -lwinmm -ladvapi32"
+		files:+" -lstdc++ -lpthread -lgcc -lmingwex -lmingw32 -lmoldname -lmsvcrt -luser32 -lkernel32"
+		
+		If Not makelib
+			files:+" "+CQuote( BlitzMaxPath()+"/lib/crtend.o" )
+		EndIf
+	
+		files="INPUT("+files+")"
+	
+	Endif
+	
 ?Linux
 
 	cmd="g++"
@@ -356,6 +411,7 @@ Function LinkApp( path$,lnk_files:TList,makelib )
 
 	files="INPUT("+files+")"
 ?
+
 	Local t$=getenv_( "BMK_LD_OPTS" )
 	If t 
 		cmd:+" "+t
